@@ -1,0 +1,42 @@
+services:
+  base-de-datos:
+    image: postgres:16-alpine
+    container_name: motoerp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: motoerp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-motoerp}
+      POSTGRES_DB: motoerp
+    volumes:
+      - datos-postgres:/var/lib/postgresql/data
+      # Respaldos: copia aquí lo que genere `pg_dump`
+      - ./respaldos:/respaldos
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U motoerp -d motoerp']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  aplicacion:
+    build: .
+    container_name: motoerp-app
+    restart: unless-stopped
+    depends_on:
+      base-de-datos:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://motoerp:${DB_PASSWORD:-motoerp}@base-de-datos:5432/motoerp?schema=public
+      SESSION_SECRET: ${SESSION_SECRET:?Define SESSION_SECRET en el archivo .env}
+      SESSION_HORAS: ${SESSION_HORAS:-12}
+      PROVEEDOR_FE: ${PROVEEDOR_FE:-mock}
+      NUBEFACT_URL: ${NUBEFACT_URL:-}
+      NUBEFACT_TOKEN: ${NUBEFACT_TOKEN:-}
+    ports:
+      - '3000:3000'
+    # Aplica las migraciones pendientes y arranca
+    command: sh -c "npx prisma migrate deploy && node server.js"
+
+volumes:
+  datos-postgres:

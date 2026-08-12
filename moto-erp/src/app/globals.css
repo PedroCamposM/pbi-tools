@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-800 antialiased;
+  }
+
+  /* Los inputs numéricos del POS no deben mostrar las flechitas */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .campo {
+    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900
+           shadow-sm outline-none transition
+           placeholder:text-slate-400
+           focus:border-marca-500 focus:ring-2 focus:ring-marca-200
+           disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
+  }
+
+  .etiqueta-campo {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .tarjeta {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  }
+
+  .boton {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+           transition focus:outline-none focus:ring-2 focus:ring-offset-1
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .boton-primario {
+    @apply boton bg-marca-600 text-white hover:bg-marca-700 focus:ring-marca-400;
+  }
+
+  .boton-secundario {
+    @apply boton border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-300;
+  }
+
+  .boton-peligro {
+    @apply boton bg-red-600 text-white hover:bg-red-700 focus:ring-red-300;
+  }
+
+  .tabla {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .tabla thead th {
+    @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold
+           uppercase tracking-wide text-slate-500;
+  }
+
+  .tabla tbody td {
+    @apply border-b border-slate-100 px-3 py-2 align-middle;
+  }
+
+  .tabla tbody tr:hover {
+    @apply bg-slate-50;
+  }
+
+  .insignia {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold;
+  }
+}
+
+/* Impresión de comprobantes: solo se imprime el documento */
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .area-impresion {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}

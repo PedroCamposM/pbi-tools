@@ -1,0 +1,927 @@
+// ---------------------------------------------------------------------------
+// MotoERP - Distribuidora de repuestos para motos + servicio tecnico
+// Modelo de datos pensado para una MYPE peruana (SUNAT).
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// ENUMS
+// ===========================================================================
+
+enum RolUsuario {
+  ADMINISTRADOR
+  VENDEDOR
+  ALMACENERO
+  CAJERO
+}
+
+enum TipoDocumentoIdentidad {
+  SIN_DOCUMENTO
+  DNI
+  CARNET_EXTRANJERIA
+  RUC
+  PASAPORTE
+}
+
+enum TipoCliente {
+  PUBLICO
+  TECNICO
+  MAYORISTA
+}
+
+enum TipoComprobante {
+  FACTURA
+  BOLETA
+  NOTA_VENTA
+  NOTA_CREDITO
+  NOTA_DEBITO
+}
+
+enum AfectacionIgv {
+  GRAVADO
+  EXONERADO
+  INAFECTO
+}
+
+enum CondicionPago {
+  CONTADO
+  CREDITO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  YAPE
+  PLIN
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  TRANSFERENCIA
+  CREDITO
+}
+
+enum EstadoVenta {
+  EMITIDA
+  ANULADA
+}
+
+enum EstadoSunat {
+  NO_APLICA
+  PENDIENTE
+  ENVIADO
+  ACEPTADO
+  OBSERVADO
+  RECHAZADO
+  ANULADO
+}
+
+enum TipoMovimientoInventario {
+  INVENTARIO_INICIAL
+  ENTRADA_COMPRA
+  ENTRADA_AJUSTE
+  ENTRADA_DEVOLUCION_CLIENTE
+  ENTRADA_TRANSFERENCIA
+  SALIDA_VENTA
+  SALIDA_AJUSTE
+  SALIDA_TALLER
+  SALIDA_DEVOLUCION_PROVEEDOR
+  SALIDA_TRANSFERENCIA
+}
+
+enum EstadoCompra {
+  BORRADOR
+  RECIBIDA
+  ANULADA
+}
+
+enum EstadoOrdenTrabajo {
+  RECEPCION
+  DIAGNOSTICO
+  EN_PROCESO
+  ESPERANDO_REPUESTOS
+  TERMINADO
+  ENTREGADO
+  ANULADO
+}
+
+enum EstadoCajaSesion {
+  ABIERTA
+  CERRADA
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  EGRESO
+}
+
+enum EstadoCuenta {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  ANULADA
+}
+
+enum EstadoComision {
+  PENDIENTE
+  LIQUIDADA
+  ANULADA
+}
+
+enum TipoComision {
+  VENTA
+  SERVICIO
+}
+
+enum TipoCodigoAlterno {
+  OEM
+  PROVEEDOR
+  BARRAS
+  EQUIVALENTE
+}
+
+// ===========================================================================
+// CONFIGURACION Y SEGURIDAD
+// ===========================================================================
+
+/// Datos del negocio. Se mantiene una sola fila (id = 1).
+model Empresa {
+  id              Int      @id @default(1)
+  ruc             String   @db.VarChar(11)
+  razonSocial     String
+  nombreComercial String?
+  direccion       String
+  ubigeo          String   @default("150101") @db.VarChar(6)
+  distrito        String?
+  provincia       String?
+  departamento    String?
+  telefono        String?
+  email           String?
+  igvPorcentaje   Decimal  @default(18.00) @db.Decimal(5, 2)
+  moneda          String   @default("PEN") @db.VarChar(3)
+  /// Regimen tributario: NRUS, RER, MYPE_TRIBUTARIO, GENERAL
+  regimen         String   @default("MYPE_TRIBUTARIO")
+  logoUrl         String?
+  piePagina       String?
+  actualizadoEn   DateTime @updatedAt
+
+  @@map("empresa")
+}
+
+model Usuario {
+  id           Int        @id @default(autoincrement())
+  nombre       String
+  email        String     @unique
+  passwordHash String
+  rol          RolUsuario @default(VENDEDOR)
+  activo       Boolean    @default(true)
+  creadoEn     DateTime   @default(now())
+
+  ventas             Venta[]
+  compras            Compra[]
+  movimientos        MovimientoInventario[]
+  sesionesCaja       CajaSesion[]
+  movimientosCaja    MovimientoCaja[]
+  ordenesRegistradas OrdenTrabajo[]
+  cobros             CobroCuentaPorCobrar[]
+  pagosProveedor     PagoCuentaPorPagar[]
+  liquidaciones      LiquidacionComision[]
+
+  @@map("usuario")
+}
+
+/// Series y correlativos por tipo de comprobante (F001, B001, etc.)
+model SerieComprobante {
+  id              Int             @id @default(autoincrement())
+  tipoComprobante TipoComprobante
+  serie           String          @db.VarChar(4)
+  correlativo     Int             @default(0)
+  almacenId       Int?
+  predeterminada  Boolean         @default(false)
+  activa          Boolean         @default(true)
+
+  almacen Almacen? @relation(fields: [almacenId], references: [id])
+
+  @@unique([tipoComprobante, serie])
+  @@map("serie_comprobante")
+}
+
+// ===========================================================================
+// CATALOGO DE PRODUCTOS
+// ===========================================================================
+
+model Categoria {
+  id      Int     @id @default(autoincrement())
+  nombre  String  @unique
+  /// Descripcion corta de la linea (ej: "Sistema de frenos")
+  detalle String?
+  activo  Boolean @default(true)
+
+  productos Producto[]
+
+  @@map("categoria")
+}
+
+/// Marca del repuesto o insumo (Honda, Motul, Bosch, NGK...)
+model Marca {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
+  productos Producto[]
+
+  @@map("marca")
+}
+
+/// Marca de la moto (Honda, Bajaj, Italika, Yamaha...) usada para compatibilidad.
+model MarcaMoto {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
+  modelos     ModeloMoto[]
+  motos       Moto[]
+  aplicacions AplicacionMoto[]
+
+  @@map("marca_moto")
+}
+
+model ModeloMoto {
+  id          Int    @id @default(autoincrement())
+  marcaMotoId Int
+  nombre      String
+  cilindrada  String?
+
+  marcaMoto   MarcaMoto        @relation(fields: [marcaMotoId], references: [id])
+  motos       Moto[]
+  aplicacions AplicacionMoto[]
+
+  @@unique([marcaMotoId, nombre])
+  @@map("modelo_moto")
+}
+
+model Producto {
+  id            Int           @id @default(autoincrement())
+  sku           String        @unique
+  nombre        String
+  descripcion   String?
+  categoriaId   Int
+  marcaId       Int?
+  /// Unidad de medida SUNAT (catalogo 03): NIU, ZZ, LTR, GLL, SET, PR
+  unidadMedida  String        @default("NIU") @db.VarChar(4)
+  afectacionIgv AfectacionIgv @default(GRAVADO)
+  /// true = servicio de taller (mano de obra), no maneja stock
+  esServicio    Boolean       @default(false)
+
+  costoPromedio   Decimal @default(0) @db.Decimal(14, 4)
+  ultimoCosto     Decimal @default(0) @db.Decimal(14, 4)
+  precioVenta     Decimal @default(0) @db.Decimal(14, 4)
+  precioTecnico   Decimal @default(0) @db.Decimal(14, 4)
+  precioMayorista Decimal @default(0) @db.Decimal(14, 4)
+
+  stockMinimo Decimal @default(0) @db.Decimal(12, 3)
+  stockMaximo Decimal @default(0) @db.Decimal(12, 3)
+  ubicacion   String? // anaquel / caja
+
+  activo   Boolean  @default(true)
+  creadoEn DateTime @default(now())
+
+  categoria      Categoria              @relation(fields: [categoriaId], references: [id])
+  marca          Marca?                 @relation(fields: [marcaId], references: [id])
+  codigosAlterno CodigoAlterno[]
+  aplicaciones   AplicacionMoto[]
+  stocks         Stock[]
+  movimientos    MovimientoInventario[]
+  detallesVenta  VentaDetalle[]
+  detallesCompra CompraDetalle[]
+  repuestosOt    OrdenTrabajoRepuesto[]
+  serviciosOt    OrdenTrabajoServicio[]
+
+  @@index([nombre])
+  @@index([categoriaId])
+  @@map("producto")
+}
+
+/// Codigos equivalentes: OEM, del proveedor, de barras o de repuesto alternativo.
+model CodigoAlterno {
+  id         Int               @id @default(autoincrement())
+  productoId Int
+  codigo     String
+  tipo       TipoCodigoAlterno @default(EQUIVALENTE)
+  nota       String?
+
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@unique([productoId, codigo])
+  @@index([codigo])
+  @@map("codigo_alterno")
+}
+
+/// En que motos entra el repuesto. Clave para atender en mostrador.
+model AplicacionMoto {
+  id           Int  @id @default(autoincrement())
+  productoId   Int
+  marcaMotoId  Int
+  modeloMotoId Int?
+  anioDesde    Int?
+  anioHasta    Int?
+
+  producto   Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  marcaMoto  MarcaMoto   @relation(fields: [marcaMotoId], references: [id])
+  modeloMoto ModeloMoto? @relation(fields: [modeloMotoId], references: [id])
+
+  @@map("aplicacion_moto")
+}
+
+// ===========================================================================
+// INVENTARIO
+// ===========================================================================
+
+model Almacen {
+  id            Int     @id @default(autoincrement())
+  nombre        String  @unique
+  direccion     String?
+  /// El almacen del taller consume repuestos en ordenes de trabajo
+  esTaller      Boolean @default(false)
+  predeterminado Boolean @default(false)
+  activo        Boolean @default(true)
+
+  stocks      Stock[]
+  movimientos MovimientoInventario[]
+  ventas      Venta[]
+  compras     Compra[]
+  series      SerieComprobante[]
+  ordenes     OrdenTrabajo[]
+
+  @@map("almacen")
+}
+
+model Stock {
+  id            Int     @id @default(autoincrement())
+  productoId    Int
+  almacenId     Int
+  cantidad      Decimal @default(0) @db.Decimal(12, 3)
+  costoPromedio Decimal @default(0) @db.Decimal(14, 4)
+
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  almacen  Almacen  @relation(fields: [almacenId], references: [id])
+
+  @@unique([productoId, almacenId])
+  @@map("stock")
+}
+
+/// Kardex valorizado (metodo: costo promedio ponderado).
+model MovimientoInventario {
+  id         Int                      @id @default(autoincrement())
+  fecha      DateTime                 @default(now())
+  productoId Int
+  almacenId  Int
+  tipo       TipoMovimientoInventario
+  /// Cantidad siempre positiva; el tipo define si suma o resta.
+  cantidad   Decimal                  @db.Decimal(12, 3)
+  costoUnitario Decimal               @default(0) @db.Decimal(14, 4)
+  /// Saldo de unidades luego del movimiento
+  saldoCantidad Decimal               @db.Decimal(12, 3)
+  /// Costo promedio ponderado unitario luego del movimiento
+  /// (el valorizado del saldo = saldoCantidad * saldoCosto)
+  saldoCosto    Decimal               @db.Decimal(14, 4)
+
+  /// Referencia legible al documento origen (ej: "Venta B001-000123")
+  referencia     String?
+  ventaId        Int?
+  compraId       Int?
+  ordenTrabajoId Int?
+  usuarioId      Int?
+  nota           String?
+
+  producto     Producto      @relation(fields: [productoId], references: [id])
+  almacen      Almacen       @relation(fields: [almacenId], references: [id])
+  venta        Venta?        @relation(fields: [ventaId], references: [id])
+  compra       Compra?       @relation(fields: [compraId], references: [id])
+  ordenTrabajo OrdenTrabajo? @relation(fields: [ordenTrabajoId], references: [id])
+  usuario      Usuario?      @relation(fields: [usuarioId], references: [id])
+
+  @@index([productoId, almacenId, fecha])
+  @@index([fecha])
+  @@map("movimiento_inventario")
+}
+
+// ===========================================================================
+// TERCEROS
+// ===========================================================================
+
+model Cliente {
+  id             Int                    @id @default(autoincrement())
+  tipoDocumento  TipoDocumentoIdentidad @default(DNI)
+  numeroDocumento String                @db.VarChar(15)
+  nombre         String
+  direccion      String?
+  telefono       String?
+  email          String?
+  tipoCliente    TipoCliente            @default(PUBLICO)
+  lineaCredito   Decimal                @default(0) @db.Decimal(14, 2)
+  diasCredito    Int                    @default(0)
+  activo         Boolean                @default(true)
+  creadoEn       DateTime               @default(now())
+
+  ventas   Venta[]
+  motos    Moto[]
+  ordenes  OrdenTrabajo[]
+  cuentas  CuentaPorCobrar[]
+  tecnico  Tecnico?
+
+  @@unique([tipoDocumento, numeroDocumento])
+  @@index([nombre])
+  @@map("cliente")
+}
+
+model Proveedor {
+  id              Int                    @id @default(autoincrement())
+  tipoDocumento   TipoDocumentoIdentidad @default(RUC)
+  numeroDocumento String                 @db.VarChar(15)
+  razonSocial     String
+  direccion       String?
+  telefono        String?
+  email           String?
+  contacto        String?
+  diasCredito     Int                    @default(0)
+  activo          Boolean                @default(true)
+
+  compras Compra[]
+  cuentas CuentaPorPagar[]
+
+  @@unique([tipoDocumento, numeroDocumento])
+  @@map("proveedor")
+}
+
+/// Tecnico / mecanico que mueve producto y ejecuta servicios.
+model Tecnico {
+  id                 Int      @id @default(autoincrement())
+  nombre             String
+  documento          String?  @db.VarChar(15)
+  telefono           String?
+  taller             String?
+  direccion          String?
+  /// Comision sobre la venta de repuestos que trae/deriva
+  comisionVentaPct   Decimal  @default(0) @db.Decimal(5, 2)
+  /// Comision sobre la mano de obra de las ordenes de trabajo que ejecuta
+  comisionServicioPct Decimal @default(0) @db.Decimal(5, 2)
+  /// Si tambien compra al credito, se le vincula una ficha de cliente
+  clienteId          Int?     @unique
+  activo             Boolean  @default(true)
+  creadoEn           DateTime @default(now())
+
+  cliente       Cliente?               @relation(fields: [clienteId], references: [id])
+  ventas        Venta[]
+  ordenes       OrdenTrabajo[]
+  servicios     OrdenTrabajoServicio[]
+  comisiones    Comision[]
+  liquidaciones LiquidacionComision[]
+
+  @@map("tecnico")
+}
+
+model Moto {
+  id           Int     @id @default(autoincrement())
+  placa        String? @db.VarChar(10)
+  clienteId    Int?
+  marcaMotoId  Int?
+  modeloMotoId Int?
+  anio         Int?
+  color        String?
+  numeroMotor  String?
+  numeroChasis String?
+  observacion  String?
+
+  cliente    Cliente?    @relation(fields: [clienteId], references: [id])
+  marcaMoto  MarcaMoto?  @relation(fields: [marcaMotoId], references: [id])
+  modeloMoto ModeloMoto? @relation(fields: [modeloMotoId], references: [id])
+  ordenes    OrdenTrabajo[]
+
+  @@index([placa])
+  @@map("moto")
+}
+
+// ===========================================================================
+// COMPRAS
+// ===========================================================================
+
+model Compra {
+  id              Int           @id @default(autoincrement())
+  proveedorId     Int
+  almacenId       Int
+  usuarioId       Int
+  tipoComprobante String        @default("FACTURA")
+  serie           String?       @db.VarChar(10)
+  numero          String?       @db.VarChar(20)
+  fecha           DateTime      @default(now())
+  fechaVencimiento DateTime?
+  condicionPago   CondicionPago @default(CONTADO)
+  moneda          String        @default("PEN") @db.VarChar(3)
+  tipoCambio      Decimal       @default(1) @db.Decimal(10, 4)
+
+  subtotal Decimal @default(0) @db.Decimal(14, 2)
+  igv      Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @default(0) @db.Decimal(14, 2)
+
+  estado      EstadoCompra @default(RECIBIDA)
+  observacion String?
+  creadoEn    DateTime     @default(now())
+
+  proveedor   Proveedor              @relation(fields: [proveedorId], references: [id])
+  almacen     Almacen                @relation(fields: [almacenId], references: [id])
+  usuario     Usuario                @relation(fields: [usuarioId], references: [id])
+  detalles    CompraDetalle[]
+  movimientos MovimientoInventario[]
+  cuenta      CuentaPorPagar?
+
+  @@index([fecha])
+  @@map("compra")
+}
+
+model CompraDetalle {
+  id         Int     @id @default(autoincrement())
+  compraId   Int
+  productoId Int
+  cantidad   Decimal @db.Decimal(12, 3)
+  costoUnitario Decimal @db.Decimal(14, 4)
+  /// Precio de venta sugerido capturado al momento de la compra
+  precioVenta   Decimal @default(0) @db.Decimal(14, 4)
+  subtotal      Decimal @db.Decimal(14, 2)
+
+  compra   Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@map("compra_detalle")
+}
+
+// ===========================================================================
+// VENTAS Y COMPROBANTES
+// ===========================================================================
+
+model Venta {
+  id              Int             @id @default(autoincrement())
+  tipoComprobante TipoComprobante
+  serie           String          @db.VarChar(4)
+  correlativo     Int
+  fecha           DateTime        @default(now())
+
+  clienteId Int
+  usuarioId Int
+  almacenId Int
+  /// Tecnico que deriva la venta (para comision)
+  tecnicoId Int?
+
+  condicionPago    CondicionPago @default(CONTADO)
+  fechaVencimiento DateTime?
+  moneda           String        @default("PEN") @db.VarChar(3)
+  tipoCambio       Decimal       @default(1) @db.Decimal(10, 4)
+
+  opGravadas   Decimal @default(0) @db.Decimal(14, 2)
+  opExoneradas Decimal @default(0) @db.Decimal(14, 2)
+  opInafectas  Decimal @default(0) @db.Decimal(14, 2)
+  descuentoTotal Decimal @default(0) @db.Decimal(14, 2)
+  igv          Decimal @default(0) @db.Decimal(14, 2)
+  total        Decimal @default(0) @db.Decimal(14, 2)
+  /// Costo de la mercaderia vendida, para calcular utilidad
+  costoTotal   Decimal @default(0) @db.Decimal(14, 2)
+
+  estado      EstadoVenta @default(EMITIDA)
+  observacion String?
+
+  /// Documento que modifica (para notas de credito/debito)
+  documentoRefId  Int?
+  motivoNotaCodigo String? @db.VarChar(2)
+  motivoNota      String?
+
+  ordenTrabajoId Int? @unique
+
+  creadoEn DateTime @default(now())
+
+  cliente        Cliente                @relation(fields: [clienteId], references: [id])
+  usuario        Usuario                @relation(fields: [usuarioId], references: [id])
+  almacen        Almacen                @relation(fields: [almacenId], references: [id])
+  tecnico        Tecnico?               @relation(fields: [tecnicoId], references: [id])
+  ordenTrabajo   OrdenTrabajo?          @relation(fields: [ordenTrabajoId], references: [id])
+  documentoRef   Venta?                 @relation("NotasVenta", fields: [documentoRefId], references: [id])
+  notas          Venta[]                @relation("NotasVenta")
+  detalles       VentaDetalle[]
+  pagos          PagoVenta[]
+  movimientos    MovimientoInventario[]
+  comprobante    ComprobanteElectronico?
+  cuenta         CuentaPorCobrar?
+  comisiones     Comision[]
+
+  @@unique([tipoComprobante, serie, correlativo])
+  @@index([fecha])
+  @@index([clienteId])
+  @@map("venta")
+}
+
+model VentaDetalle {
+  id         Int     @id @default(autoincrement())
+  ventaId    Int
+  productoId Int
+  descripcion String
+  unidadMedida String @default("NIU") @db.VarChar(4)
+  cantidad   Decimal @db.Decimal(12, 3)
+  /// Precio unitario SIN IGV
+  precioUnitario Decimal @db.Decimal(14, 4)
+  descuento      Decimal @default(0) @db.Decimal(14, 2)
+  afectacionIgv  AfectacionIgv @default(GRAVADO)
+  valorVenta     Decimal @db.Decimal(14, 2)
+  igv            Decimal @default(0) @db.Decimal(14, 2)
+  total          Decimal @db.Decimal(14, 2)
+  costoUnitario  Decimal @default(0) @db.Decimal(14, 4)
+
+  venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@map("venta_detalle")
+}
+
+model PagoVenta {
+  id           Int        @id @default(autoincrement())
+  ventaId      Int
+  metodoPago   MetodoPago
+  monto        Decimal    @db.Decimal(14, 2)
+  referencia   String?
+  cajaSesionId Int?
+  fecha        DateTime   @default(now())
+
+  venta      Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  cajaSesion CajaSesion? @relation(fields: [cajaSesionId], references: [id])
+
+  @@map("pago_venta")
+}
+
+/// Representacion electronica del comprobante (UBL 2.1) y su estado ante SUNAT.
+model ComprobanteElectronico {
+  id             Int         @id @default(autoincrement())
+  ventaId        Int         @unique
+  /// Codigo SUNAT catalogo 01: 01 factura, 03 boleta, 07 NC, 08 ND
+  codigoTipoDoc  String      @db.VarChar(2)
+  nombreArchivo  String
+  xml            String
+  hashCpe        String?
+  estado         EstadoSunat @default(PENDIENTE)
+  proveedor      String      @default("mock")
+  codigoRespuesta String?
+  mensajeRespuesta String?
+  cdrXml         String?
+  enlacePdf      String?
+  enviadoEn      DateTime?
+  intentos       Int         @default(0)
+  creadoEn       DateTime    @default(now())
+
+  venta Venta @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+
+  @@map("comprobante_electronico")
+}
+
+// ===========================================================================
+// TALLER / SERVICIO TECNICO
+// ===========================================================================
+
+model OrdenTrabajo {
+  id           Int                @id @default(autoincrement())
+  numero       String             @unique
+  clienteId    Int
+  motoId       Int?
+  tecnicoId    Int?
+  almacenId    Int
+  usuarioId    Int
+  fechaIngreso DateTime           @default(now())
+  fechaPrometida DateTime?
+  fechaEntrega DateTime?
+  kilometraje  Int?
+  estado       EstadoOrdenTrabajo @default(RECEPCION)
+
+  motivoIngreso   String
+  diagnostico     String?
+  trabajoRealizado String?
+  observacion     String?
+
+  totalRepuestos Decimal @default(0) @db.Decimal(14, 2)
+  totalServicios Decimal @default(0) @db.Decimal(14, 2)
+  total          Decimal @default(0) @db.Decimal(14, 2)
+
+  creadoEn DateTime @default(now())
+
+  cliente     Cliente                @relation(fields: [clienteId], references: [id])
+  moto        Moto?                  @relation(fields: [motoId], references: [id])
+  tecnico     Tecnico?               @relation(fields: [tecnicoId], references: [id])
+  almacen     Almacen                @relation(fields: [almacenId], references: [id])
+  usuario     Usuario                @relation(fields: [usuarioId], references: [id])
+  repuestos   OrdenTrabajoRepuesto[]
+  servicios   OrdenTrabajoServicio[]
+  movimientos MovimientoInventario[]
+  venta       Venta?
+  comisiones  Comision[]
+
+  @@index([estado])
+  @@map("orden_trabajo")
+}
+
+model OrdenTrabajoRepuesto {
+  id             Int     @id @default(autoincrement())
+  ordenTrabajoId Int
+  productoId     Int
+  cantidad       Decimal @db.Decimal(12, 3)
+  precioUnitario Decimal @db.Decimal(14, 4)
+  subtotal       Decimal @db.Decimal(14, 2)
+  costoUnitario  Decimal @default(0) @db.Decimal(14, 4)
+  /// El stock se descuenta al confirmar el consumo
+  descontado     Boolean @default(false)
+
+  ordenTrabajo OrdenTrabajo @relation(fields: [ordenTrabajoId], references: [id], onDelete: Cascade)
+  producto     Producto     @relation(fields: [productoId], references: [id])
+
+  @@map("orden_trabajo_repuesto")
+}
+
+model OrdenTrabajoServicio {
+  id             Int     @id @default(autoincrement())
+  ordenTrabajoId Int
+  productoId     Int?
+  descripcion    String
+  cantidad       Decimal @default(1) @db.Decimal(12, 3)
+  precioUnitario Decimal @db.Decimal(14, 4)
+  subtotal       Decimal @db.Decimal(14, 2)
+  tecnicoId      Int?
+
+  ordenTrabajo OrdenTrabajo @relation(fields: [ordenTrabajoId], references: [id], onDelete: Cascade)
+  producto     Producto?    @relation(fields: [productoId], references: [id])
+  tecnico      Tecnico?     @relation(fields: [tecnicoId], references: [id])
+
+  @@map("orden_trabajo_servicio")
+}
+
+// ===========================================================================
+// CAJA
+// ===========================================================================
+
+model CajaSesion {
+  id             Int              @id @default(autoincrement())
+  usuarioId      Int
+  fechaApertura  DateTime         @default(now())
+  montoApertura  Decimal          @db.Decimal(14, 2)
+  fechaCierre    DateTime?
+  montoCierre    Decimal?         @db.Decimal(14, 2)
+  montoEsperado  Decimal?         @db.Decimal(14, 2)
+  diferencia     Decimal?         @db.Decimal(14, 2)
+  estado         EstadoCajaSesion @default(ABIERTA)
+  observacion    String?
+
+  usuario     Usuario          @relation(fields: [usuarioId], references: [id])
+  movimientos MovimientoCaja[]
+  pagosVenta  PagoVenta[]
+  cobros      CobroCuentaPorCobrar[]
+  pagosCxp    PagoCuentaPorPagar[]
+
+  @@map("caja_sesion")
+}
+
+model MovimientoCaja {
+  id           Int                @id @default(autoincrement())
+  cajaSesionId Int
+  usuarioId    Int
+  fecha        DateTime           @default(now())
+  tipo         TipoMovimientoCaja
+  metodoPago   MetodoPago         @default(EFECTIVO)
+  /// VENTA, COBRANZA, COMPRA, GASTO, RETIRO, DEPOSITO, LIQUIDACION_COMISION, OTRO
+  categoria    String             @default("OTRO")
+  concepto     String
+  monto        Decimal            @db.Decimal(14, 2)
+  referencia   String?
+
+  cajaSesion CajaSesion @relation(fields: [cajaSesionId], references: [id])
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id])
+
+  @@index([fecha])
+  @@map("movimiento_caja")
+}
+
+// ===========================================================================
+// CUENTAS CORRIENTES
+// ===========================================================================
+
+model CuentaPorCobrar {
+  id            Int          @id @default(autoincrement())
+  clienteId     Int
+  ventaId       Int          @unique
+  fechaEmision  DateTime     @default(now())
+  fechaVencimiento DateTime
+  montoOriginal Decimal      @db.Decimal(14, 2)
+  saldo         Decimal      @db.Decimal(14, 2)
+  estado        EstadoCuenta @default(PENDIENTE)
+
+  cliente Cliente                @relation(fields: [clienteId], references: [id])
+  venta   Venta                  @relation(fields: [ventaId], references: [id])
+  cobros  CobroCuentaPorCobrar[]
+
+  @@index([estado])
+  @@map("cuenta_por_cobrar")
+}
+
+model CobroCuentaPorCobrar {
+  id           Int        @id @default(autoincrement())
+  cuentaId     Int
+  fecha        DateTime   @default(now())
+  monto        Decimal    @db.Decimal(14, 2)
+  metodoPago   MetodoPago @default(EFECTIVO)
+  referencia   String?
+  cajaSesionId Int?
+  usuarioId    Int
+
+  cuenta     CuentaPorCobrar @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  cajaSesion CajaSesion?     @relation(fields: [cajaSesionId], references: [id])
+  usuario    Usuario         @relation(fields: [usuarioId], references: [id])
+
+  @@map("cobro_cuenta_por_cobrar")
+}
+
+model CuentaPorPagar {
+  id            Int          @id @default(autoincrement())
+  proveedorId   Int
+  compraId      Int          @unique
+  fechaEmision  DateTime     @default(now())
+  fechaVencimiento DateTime
+  montoOriginal Decimal      @db.Decimal(14, 2)
+  saldo         Decimal      @db.Decimal(14, 2)
+  estado        EstadoCuenta @default(PENDIENTE)
+
+  proveedor Proveedor            @relation(fields: [proveedorId], references: [id])
+  compra    Compra               @relation(fields: [compraId], references: [id])
+  pagos     PagoCuentaPorPagar[]
+
+  @@index([estado])
+  @@map("cuenta_por_pagar")
+}
+
+model PagoCuentaPorPagar {
+  id           Int        @id @default(autoincrement())
+  cuentaId     Int
+  fecha        DateTime   @default(now())
+  monto        Decimal    @db.Decimal(14, 2)
+  metodoPago   MetodoPago @default(EFECTIVO)
+  referencia   String?
+  cajaSesionId Int?
+  usuarioId    Int
+
+  cuenta     CuentaPorPagar @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  cajaSesion CajaSesion?    @relation(fields: [cajaSesionId], references: [id])
+  usuario    Usuario        @relation(fields: [usuarioId], references: [id])
+
+  @@map("pago_cuenta_por_pagar")
+}
+
+// ===========================================================================
+// COMISIONES DE TECNICOS
+// ===========================================================================
+
+model Comision {
+  id             Int            @id @default(autoincrement())
+  tecnicoId      Int
+  tipo           TipoComision
+  fecha          DateTime       @default(now())
+  ventaId        Int?
+  ordenTrabajoId Int?
+  concepto       String
+  baseCalculo    Decimal        @db.Decimal(14, 2)
+  porcentaje     Decimal        @db.Decimal(5, 2)
+  monto          Decimal        @db.Decimal(14, 2)
+  estado         EstadoComision @default(PENDIENTE)
+  liquidacionId  Int?
+
+  tecnico      Tecnico              @relation(fields: [tecnicoId], references: [id])
+  venta        Venta?               @relation(fields: [ventaId], references: [id])
+  ordenTrabajo OrdenTrabajo?        @relation(fields: [ordenTrabajoId], references: [id])
+  liquidacion  LiquidacionComision? @relation(fields: [liquidacionId], references: [id])
+
+  @@index([tecnicoId, estado])
+  @@map("comision")
+}
+
+model LiquidacionComision {
+  id          Int        @id @default(autoincrement())
+  tecnicoId   Int
+  fecha       DateTime   @default(now())
+  fechaDesde  DateTime
+  fechaHasta  DateTime
+  total       Decimal    @db.Decimal(14, 2)
+  metodoPago  MetodoPago @default(EFECTIVO)
+  observacion String?
+  usuarioId   Int
+
+  tecnico    Tecnico    @relation(fields: [tecnicoId], references: [id])
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id])
+  comisiones Comision[]
+
+  @@map("liquidacion_comision")
+}
