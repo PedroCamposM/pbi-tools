@@ -1,11 +1,15 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { requerirUsuario } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { sistemaConfigurado } from '@/lib/instalacion';
 import { cerrarSesion } from '@/actions/auth';
 import { Navegacion } from '@/components/navegacion';
 import { etiqueta } from '@/lib/format';
 
 export default async function LayoutAplicacion({ children }: { children: React.ReactNode }) {
+  if (!(await sistemaConfigurado())) redirect('/bienvenida');
+
   const usuario = await requerirUsuario();
   const empresa = await db.empresa.findFirst();
 

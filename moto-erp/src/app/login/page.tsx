@@ -1,8 +1,14 @@
 import { redirect } from 'next/navigation';
 import { sesionActual } from '@/lib/auth';
+import { sistemaConfigurado } from '@/lib/instalacion';
 import { FormularioLogin } from './formulario';
 
+export const dynamic = 'force-dynamic';
+
 export default async function PaginaLogin() {
+  // Instalación recién hecha: no hay con quién iniciar sesión todavía.
+  if (!(await sistemaConfigurado())) redirect('/bienvenida');
+
   const usuario = await sesionActual();
   if (usuario) redirect('/');
 

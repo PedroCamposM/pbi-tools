@@ -21,9 +21,13 @@ export const config = {
   matcher: [
     /*
      * Todo excepto:
-     *  - /login y /sin-permiso
+     *  - /login, /bienvenida y /sin-permiso
      *  - recursos internos de Next y archivos estáticos
+     *
+     * El asistente de primer uso queda fuera porque corre cuando todavía no
+     * existe ningún usuario con quien iniciar sesión. Quién puede verlo se
+     * decide en la propia página, que sí puede consultar la base de datos.
      */
-    '/((?!login|sin-permiso|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!login|bienvenida|sin-permiso|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

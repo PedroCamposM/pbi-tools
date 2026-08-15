@@ -24,7 +24,7 @@ async function main() {
     update: {},
     create: {
       id: 1,
-      ruc: '20512345678',
+      ruc: '20512345671',
       razonSocial: 'DISTRIBUIDORA DE REPUESTOS EL VELOZ E.I.R.L.',
       nombreComercial: 'Repuestos El Veloz',
       direccion: 'Av. Aviación 1234, Int. 05',
