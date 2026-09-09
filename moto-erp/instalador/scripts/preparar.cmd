@@ -52,12 +52,13 @@ echo ===========================================================================
 call :verificar_piezas          || exit /b 10
 call :cargar_o_crear_config     || exit /b 11
 call :inicializar_postgres      || exit /b 12
-call :registrar_servicio        || exit /b 13
-call :arrancar_postgres         || exit /b 14
-call :crear_base                || exit /b 15
-call :aplicar_migraciones       || exit /b 16
-call :registrar_tarea           || exit /b 17
-call :arrancar_servidor         || exit /b 18
+call :dar_permisos              || exit /b 13
+call :registrar_servicio        || exit /b 14
+call :arrancar_postgres         || exit /b 15
+call :crear_base                || exit /b 16
+call :aplicar_migraciones       || exit /b 17
+call :registrar_tarea           || exit /b 18
+call :arrancar_servidor         || exit /b 19
 
 echo.
 echo  LISTO. MotoERP responde en http://localhost:%PUERTO_APP%
@@ -69,12 +70,30 @@ rem  Que todas las piezas hayan llegado. Si falta una, es un error de armado
 rem  del instalador y conviene decirlo con nombre y apellido.
 rem ---------------------------------------------------------------------------
 :verificar_piezas
-if not exist "%PGBIN%\postgres.exe" echo ERROR: falta "%PGBIN%\postgres.exe" & exit /b 1
-if not exist "%PGBIN%\pg_ctl.exe"   echo ERROR: falta "%PGBIN%\pg_ctl.exe"   & exit /b 1
-if not exist "%NODE%"               echo ERROR: falta "%NODE%"               & exit /b 1
-if not exist "%APP%\server.js"      echo ERROR: falta "%APP%\server.js"      & exit /b 1
-if not exist "%APP%\prisma\schema.prisma" echo ERROR: falta el esquema de Prisma & exit /b 1
-if not exist "%APP%\node_modules\prisma\build\index.js" echo ERROR: falta la CLI de Prisma & exit /b 1
+if not exist "%PGBIN%\postgres.exe" (
+  echo ERROR: falta "%PGBIN%\postgres.exe"
+  exit /b 1
+)
+if not exist "%PGBIN%\pg_ctl.exe" (
+  echo ERROR: falta "%PGBIN%\pg_ctl.exe"
+  exit /b 1
+)
+if not exist "%NODE%" (
+  echo ERROR: falta "%NODE%"
+  exit /b 1
+)
+if not exist "%APP%\server.js" (
+  echo ERROR: falta "%APP%\server.js"
+  exit /b 1
+)
+if not exist "%APP%\prisma\schema.prisma" (
+  echo ERROR: falta el esquema de Prisma
+  exit /b 1
+)
+if not exist "%APP%\node_modules\prisma\build\index.js" (
+  echo ERROR: falta la CLI de Prisma
+  exit /b 1
+)
 
 rem initdb recibe la ruta del archivo de claves dentro de -o, donde ya no hay
 rem forma limpia de volver a entrecomillarla. Con "C:\ProgramData" nunca pasa,
@@ -103,9 +122,18 @@ for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$b=New-Object byte[] 24;[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[BitConverter]::ToString($b).Replace('-','').ToLower()"`) do set "CLAVE_APP=%%S"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$b=New-Object byte[] 24;[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[BitConverter]::ToString($b).Replace('-','').ToLower()"`) do set "CLAVE_SUPER=%%S"
 
-if not defined SECRETO     echo ERROR: PowerShell no genero la clave de sesion. & exit /b 1
-if not defined CLAVE_APP   echo ERROR: PowerShell no genero la clave de la base. & exit /b 1
-if not defined CLAVE_SUPER echo ERROR: PowerShell no genero la clave del superusuario. & exit /b 1
+if not defined SECRETO (
+  echo ERROR: PowerShell no genero la clave de sesion.
+  exit /b 1
+)
+if not defined CLAVE_APP (
+  echo ERROR: PowerShell no genero la clave de la base.
+  exit /b 1
+)
+if not defined CLAVE_SUPER (
+  echo ERROR: PowerShell no genero la clave del superusuario.
+  exit /b 1
+)
 
 rem Las claves son hexadecimales a proposito: entran en una URL de conexion sin
 rem necesitar escapes, y no traen caracteres que cmd interprete.
@@ -158,14 +186,28 @@ if not exist "%PGDATA%\PG_VERSION" (
 
 del /f /q "%CLAVES%" >nul 2>&1
 
-if not exist "%PGDATA%\PG_VERSION" echo ERROR: initdb no pudo crear la base. & exit /b 1
+if not exist "%PGDATA%\PG_VERSION" (
+  echo ERROR: initdb no pudo crear la base.
+  exit /b 1
+)
 
 rem El servicio corre como NETWORK SERVICE, que no hereda nada util de
 rem ProgramData ni de Archivos de Programa.
 icacls "%PGDATA%" /grant "*S-1-5-20:(OI)(CI)F" /T /C /Q >nul 2>&1
-icacls "%BASE%\pgsql" /grant "*S-1-5-20:(OI)(CI)RX" /T /C /Q >nul 2>&1
-
 echo  PostgreSQL inicializado.
+exit /b 0
+
+
+rem ---------------------------------------------------------------------------
+rem  Permisos para NETWORK SERVICE, que es la cuenta con la que corre el
+rem  servicio de PostgreSQL. No hereda nada util ni de Archivos de Programa ni
+rem  de ProgramData, y esto hay que rehacerlo en cada instalacion porque la
+rem  carpeta del programa se reemplaza entera.
+rem ---------------------------------------------------------------------------
+:dar_permisos
+echo  Ajustando permisos...
+icacls "%BASE%\pgsql" /grant "*S-1-5-20:(OI)(CI)RX" /T /C /Q >nul 2>&1
+icacls "%REGISTROS%" /grant "*S-1-5-20:(OI)(CI)M" /T /C /Q >nul 2>&1
 exit /b 0
 
 
@@ -181,9 +223,12 @@ if not errorlevel 1 (
 )
 
 echo  Registrando el servicio "%SERVICIO%" en el puerto %PGPUERTO%...
-"%PGBIN%\pg_ctl.exe" register -N "%SERVICIO%" -D "%PGDATA%" -S auto -o "-p %PGPUERTO% -c listen_addresses=127.0.0.1"
+"%PGBIN%\pg_ctl.exe" register -N "%SERVICIO%" -D "%PGDATA%" -S auto -l "%REGISTROS%\postgres.log" -o "-p %PGPUERTO% -c listen_addresses=127.0.0.1"
 sc query "%SERVICIO%" >nul 2>&1
-if errorlevel 1 echo ERROR: el servicio no quedo registrado. & exit /b 1
+if errorlevel 1 (
+  echo ERROR: el servicio no quedo registrado.
+  exit /b 1
+)
 
 sc description "%SERVICIO%" "Base de datos de MotoERP." >nul 2>&1
 echo  Servicio registrado.
@@ -216,7 +261,10 @@ set "PGPASSWORD=%CLAVE_SUPER%"
 
 echo  Creando el usuario "motoerp" si hiciera falta...
 "%PGBIN%\psql.exe" -h 127.0.0.1 -p %PGPUERTO% -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'motoerp') THEN CREATE ROLE motoerp LOGIN PASSWORD '%CLAVE_APP%'; END IF; END $$;"
-if errorlevel 1 echo ERROR: no se pudo crear el usuario de la base. & exit /b 1
+if errorlevel 1 (
+  echo ERROR: no se pudo crear el usuario de la base.
+  exit /b 1
+)
 
 rem Si la base ya existe, createdb protesta y no pasa nada: lo que vale es la
 rem comprobacion de abajo. Es dueno de su propia base, asi que puede crear
@@ -243,7 +291,10 @@ echo  Aplicando migraciones de Prisma...
 set "CHECKPOINT_DISABLE=1"
 set "PRISMA_HIDE_UPDATE_MESSAGE=1"
 "%NODE%" "%APP%\node_modules\prisma\build\index.js" migrate deploy --schema "%APP%\prisma\schema.prisma"
-if errorlevel 1 echo ERROR: fallaron las migraciones. & exit /b 1
+if errorlevel 1 (
+  echo ERROR: fallaron las migraciones.
+  exit /b 1
+)
 echo  Migraciones al dia.
 exit /b 0
 
@@ -256,7 +307,10 @@ rem ---------------------------------------------------------------------------
 :registrar_tarea
 echo  Registrando la tarea "%TAREA%"...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tarea.ps1" -Servidor "%~dp0servidor.cmd" -Nombre "%TAREA%"
-if errorlevel 1 echo ERROR: no se pudo registrar la tarea programada. & exit /b 1
+if errorlevel 1 (
+  echo ERROR: no se pudo registrar la tarea programada.
+  exit /b 1
+)
 echo  Tarea registrada.
 exit /b 0
 

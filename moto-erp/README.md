@@ -39,7 +39,22 @@ capa de proveedor intercambiable (ver [Facturación electrónica](#facturación-
 
 ## Puesta en marcha
 
-### Opción A — Docker (recomendada para el negocio)
+### Opción A — Instalador de Windows (para entregarlo a un negocio)
+
+Un `.exe` que instala todo —aplicación, PostgreSQL y arranque automático— sin
+Docker, sin WSL y sin consola. Quien lo recibe hace doble clic y termina con el
+navegador abierto en el asistente de primer uso.
+
+Para construirlo, en Windows:
+
+```
+instalador\empaquetar.cmd
+```
+
+Los requisitos previos y el detalle de qué queda instalado están en
+[`instalador/README.md`](instalador/README.md).
+
+### Opción B — Docker (para servidores)
 
 ```bash
 cp .env.example .env
@@ -54,7 +69,7 @@ docker compose exec aplicacion npx tsx prisma/seed.ts
 
 La aplicación queda en `http://localhost:3000`.
 
-### Opción B — Desarrollo local
+### Opción C — Desarrollo local
 
 Necesitas Node.js 22+ y PostgreSQL 14+.
 

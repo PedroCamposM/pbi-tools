@@ -1,0 +1,7 @@
+# PostgreSQL portable: 300 MB que se descargan aparte, no van al repositorio.
+# Como conseguirlo esta en el README de esta carpeta.
+vendor/
+
+# Lo que produce empaquetar.cmd
+build/
+salida/

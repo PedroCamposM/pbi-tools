@@ -3,7 +3,7 @@
 Documento de traspaso. Si retomas MotoERP en una sesión nueva, empieza por aquí:
 resume en qué punto está, qué decisiones ya se tomaron y por qué, y qué sigue.
 
-Última actualización: agosto 2026.
+Última actualización: setiembre 2026.
 
 ---
 
@@ -75,8 +75,68 @@ un servidor o a SaaS.
 |---|---|
 | Asistente de primer uso | ✅ Hecho y verificado (`183ce9d`) |
 | Respaldos automáticos | ✅ Hecho y verificado |
-| Script de Inno Setup + PostgreSQL portable | ⏳ Sin empezar |
-| Arranque automático y apertura del navegador | ⏳ Sin empezar |
+| Script de Inno Setup + PostgreSQL portable | ⚠️ Escrito, **sin probar** |
+| Arranque automático y apertura del navegador | ⚠️ Escrito, **sin probar** |
+
+**Las dos últimas están escritas pero nadie las ejecutó todavía.** Claude no
+tiene Windows, así que no pudo correr ni `empaquetar.cmd` ni el `.exe`
+resultante. Es exactamente la misma situación que produjo el bug del
+Dockerfile: la aplicación probada a fondo y el empaquetado no. **Tratarlas como
+un primer borrador que va a necesitar un par de vueltas en la máquina del
+usuario**, no como algo terminado.
+
+### Qué hace el instalador (escrito, sin probar)
+
+Todo vive en `instalador/`. El instructivo completo —cómo construirlo, qué
+queda instalado, cómo actualizar— está en `instalador/README.md`.
+
+Se construye en Windows con `instalador\empaquetar.cmd`, que compila la
+aplicación, arma la carpeta y llama a Inno Setup. Antes hay que bajar
+PostgreSQL 16 "binaries only" a `instalador\vendor\pgsql` (no está en git:
+son 300 MB).
+
+**Decisiones que conviene no deshacer sin leer el porqué:**
+
+- **PostgreSQL se inicializa con `pg_ctl init`, no llamando a `initdb`.** En
+  Windows el motor se niega a arrancar con permisos de administrador —y el
+  instalador los tiene—; `pg_ctl` es justamente quien se relanza a sí mismo con
+  un token restringido. Por lo mismo, `PGDATA` **no se pre-crea**: lo tiene que
+  crear el proceso restringido para quedar como dueño.
+
+- **La aplicación corre en una tarea programada, no en un servicio.** Un
+  servicio necesita un ejecutable que dialogue con el Administrador de
+  servicios, y `node.exe` no lo hace; envolverlo pediría traer NSSM o parecidos
+  solo para eso. Una tarea como SYSTEM da lo mismo (arranca al encender, sin
+  ventana, sin que nadie inicie sesión) sin agregar dependencias. PostgreSQL sí
+  es un servicio de verdad, porque `pg_ctl` sabe registrarse solo y así Windows
+  lo apaga ordenadamente.
+
+- **La tarea se registra con el SID `S-1-5-18`, no con el nombre "SYSTEM".** En
+  un Windows en español la cuenta se llama "SISTEMA" y el nombre no resuelve.
+  Lo mismo con los grupos en las llamadas a `icacls`: siempre por SID.
+
+- **Los datos van a `C:\ProgramData\MotoERP`, nunca a Archivos de Programa.**
+  Base, respaldos, claves y registros. Desinstalar **no** los borra: perder la
+  contabilidad no puede ser el precio de quitar un programa. Y `PG_DUMP_PATH`
+  apunta al `pg_dump.exe` empaquetado, así que los respaldos salen por el
+  camino bueno (estructura + datos), como pedía la nota de la sección anterior.
+
+- **Las claves se generan una sola vez y se reutilizan.** Están en
+  `config.cmd`, restringido a SYSTEM y administradores. Si se borra ese archivo
+  sin borrar también la base, la base queda inaccesible.
+
+- **Nada escucha fuera de la máquina.** PostgreSQL en `127.0.0.1:5433` (5433 y
+  no 5432 para no chocar con un PostgreSQL que ya esté instalado) y la
+  aplicación en `127.0.0.1:3000`. Efecto secundario útil: no aparece el aviso
+  del firewall al instalar.
+
+- **El icono del escritorio no arranca nada**, solo comprueba el puerto y abre
+  el navegador. El programa ya está corriendo desde que se encendió la
+  computadora.
+
+**Trampa de cmd que ya costó una pasada de revisión:** `if <condición> echo X &
+exit /b 1` ejecuta el `exit` **siempre**, se cumpla o no la condición. Hay que
+escribirlo con paréntesis. Estaba en 22 líneas de estos scripts.
 
 ### Qué hace el asistente (ya hecho)
 
@@ -194,13 +254,14 @@ Variables: `URL_BASE`, `CHROMIUM_PATH`.
 
 ## 7. Trampas del entorno (leer antes de sufrir)
 
-**Claude no puede escribir en este repositorio.** Ni `git push` (403) ni las
-herramientas MCP de GitHub (`create_or_update_file` → "Resource not accessible
-by integration"). Se probó en dos sesiones distintas. Única vía que funciona:
-entregar el trabajo como bundle de git (`git bundle create ... --not
-<commit-base>`) y que el usuario lo aplique con `git fetch <bundle> <rama>` +
-`git merge FETCH_HEAD` + `git push`. Avísale de esto al empezar, para que no
-espere que los cambios aparezcan solos en GitHub.
+**Claude ya puede escribir en este repositorio.** Esto cambió en setiembre de
+2026: `git push origin claude/moto-distributor-sales-inventory-f5b4dy` funciona
+y se acabó el baile del bundle. Los cambios llegan solos a GitHub y el usuario
+los baja con `git pull`.
+
+> Ojo con una pista falsa: `git push --dry-run` **sigue devolviendo 403**
+> aunque el push real funcione. Si vas a comprobar el acceso, compruébalo
+> empujando un commit de verdad, no con `--dry-run`.
 
 **No hay daemon de Docker en el contenedor de Claude.** No se puede construir ni
 probar la imagen desde ahí. Ese fue exactamente el origen del bug del
@@ -221,15 +282,34 @@ carpeta se corren, y no dar por sobreentendido nada del entorno.
 
 ## 8. Siguiente paso concreto
 
-1. Scripts del instalador: Inno Setup, PostgreSQL portable, servicio de Windows,
-   apertura del navegador en `localhost:3000`.
-2. Probar el instalador en la máquina del usuario, iterando como se hizo con
-   Docker.
+**Probar el instalador en Windows.** Está escrito entero y no lo ha corrido
+nadie. En orden:
 
-Al armar el instalador, apuntar `PG_DUMP_PATH` al `pg_dump.exe` que venga
-empaquetado y `RESPALDOS_DIR` a una carpeta fuera de Archivos de Programa
-(Documentos, por ejemplo): así los respaldos salen completos y sobreviven a una
-desinstalación.
+1. Bajar PostgreSQL 16 "binaries only" a `instalador\vendor\pgsql`
+   (ver `instalador/README.md`).
+2. Correr `instalador\empaquetar.cmd` y que genere el `.exe`.
+3. Instalarlo **en una computadora que no sea la de desarrollo**. En la de
+   desarrollo ya están Node y PostgreSQL, y eso puede tapar justo el problema
+   que el cliente sí va a ver.
+4. Iterar sobre lo que falle, como se hizo con Docker.
+
+Cuando falle algo, el primer lugar donde mirar es
+`C:\ProgramData\MotoERP\registros\instalacion.log`: `preparar.cmd` registra
+cada paso y sale con un código distinto por etapa (10 = faltan piezas,
+11 = configuración, 12 = initdb, 13 = permisos, 14 = servicio, 15 = arranque de
+PostgreSQL, 16 = base y usuario, 17 = migraciones, 18 = tarea programada,
+19 = el servidor no respondió).
+
+### Mudanza a un repositorio propio (conversado, sin hacer)
+
+El usuario planteó sacar MotoERP de `pbi-tools`, y tiene razón: `pbi-tools` es
+un fork **público** con licencia **AGPL v3** que no tiene nada que ver. Hoy la
+lógica del negocio está a la vista de cualquiera.
+
+Acordado que se hace **después** de que el instalador esté probado, para no
+mover dos veces. El camino que conserva el historial de `moto-erp/` es
+`git subtree split --prefix=moto-erp`, que ya viene en Git para Windows. El
+repositorio nuevo debería ser **privado** y llevar su propia licencia.
 
 **Cabo suelto menor:** `cambiarEstadoProducto` existe en
 `src/actions/catalogo.ts` pero ninguna pantalla lo llama. Hoy un producto se
