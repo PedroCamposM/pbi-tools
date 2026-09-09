@@ -1,0 +1,7 @@
+# Estos archivos los ejecuta Windows: tienen que llegar con finales de linea
+# CRLF pase lo que pase con la configuracion de git de cada maquina. cmd.exe
+# se atraganta con archivos .cmd en LF (sobre todo con las etiquetas de goto).
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.iss  text eol=crlf
+*.ico  binary
