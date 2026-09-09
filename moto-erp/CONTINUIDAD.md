@@ -74,7 +74,7 @@ un servidor o a SaaS.
 | Pieza | Estado |
 |---|---|
 | Asistente de primer uso | ✅ Hecho y verificado (`183ce9d`) |
-| Respaldos automáticos | ⏳ Sin empezar |
+| Respaldos automáticos | ✅ Hecho y verificado |
 | Script de Inno Setup + PostgreSQL portable | ⏳ Sin empezar |
 | Arranque automático y apertura del navegador | ⏳ Sin empezar |
 
@@ -94,6 +94,36 @@ Detalles que ya resuelve y conviene no romper:
 
 Archivos: `src/lib/instalacion.ts`, `src/lib/datos-base.ts`,
 `src/actions/instalacion.ts`, `src/app/bienvenida/`.
+
+### Qué hacen los respaldos (ya hecho)
+
+Un respaldo por día, automático, más el botón *Respaldar ahora* y la descarga
+desde **Configuración → Respaldos**.
+
+Decisiones que conviene no romper:
+
+- **El disparador vive en `(app)/layout.tsx`, no en `instrumentation.ts`.** Next
+  compila `instrumentation.ts` también para el runtime edge y la compilación
+  revienta al ver `node:fs`. Se intentó y no funciona; no volver a intentarlo.
+- **No hay hora fija.** Comprueba si ya existe el respaldo de hoy, como mucho una
+  vez por hora. La computadora de una tienda se apaga al cerrar: un cron
+  nocturno no correría nunca.
+- **Dos formatos.** Con `pg_dump` disponible, estructura + datos. Sin él —el caso
+  de la imagen Docker— volcado propio de solo datos, que se restaura después de
+  `prisma migrate deploy`. El instalador de Windows traerá PostgreSQL, así que
+  ahí entra el camino bueno sin tocar código.
+- **Los literales del volcado propio los arma PostgreSQL** con `quote_nullable`,
+  no JavaScript. Escaparlos a mano sería reinventar mal algo que el motor ya
+  hace bien para texto, fechas, JSON, arreglos y binarios.
+- **La limpieza nunca baja de 10 archivos**, aunque estén vencidos, y solo borra
+  archivos con el patrón de nombre propio: no toca nada más de esa carpeta.
+
+Verificado restaurando en bases limpias: los dos formatos devuelven las 9 tablas
+principales idénticas por checksum, y los contadores de id siguen la numeración
+sin chocar.
+
+Archivos: `src/lib/respaldos.ts`, `src/lib/respaldo-diario.ts`,
+`src/actions/respaldos.ts`, `src/app/(app)/configuracion/respaldos/`.
 
 ---
 
@@ -152,6 +182,7 @@ levantada y `npm install -D playwright`:
 | Script | Cubre |
 |---|---|
 | `instalacion.mjs` | Asistente de primer uso sobre base vacía, hasta vender |
+| `respaldos.mjs` | Respaldo manual, listado, descarga y rechazo de rutas ajenas |
 | `comisiones.mjs` | Comisión por venta y por servicio, liquidación con egreso de caja |
 | `compras-y-credito.mjs` | Compra → kardex y costo promedio → cuenta por pagar; venta al crédito → cobranza |
 
@@ -190,12 +221,15 @@ carpeta se corren, y no dar por sobreentendido nada del entorno.
 
 ## 8. Siguiente paso concreto
 
-1. Respaldos automáticos: volcado diario a una carpeta + botón "Respaldar ahora"
-   en Configuración. Sin esto, entregar el instalador es irresponsable.
-2. Scripts del instalador: Inno Setup, PostgreSQL portable, servicio de Windows,
+1. Scripts del instalador: Inno Setup, PostgreSQL portable, servicio de Windows,
    apertura del navegador en `localhost:3000`.
-3. Probar el instalador en la máquina del usuario, iterando como se hizo con
+2. Probar el instalador en la máquina del usuario, iterando como se hizo con
    Docker.
+
+Al armar el instalador, apuntar `PG_DUMP_PATH` al `pg_dump.exe` que venga
+empaquetado y `RESPALDOS_DIR` a una carpeta fuera de Archivos de Programa
+(Documentos, por ejemplo): así los respaldos salen completos y sobreviven a una
+desinstalación.
 
 **Cabo suelto menor:** `cambiarEstadoProducto` existe en
 `src/actions/catalogo.ts` pero ninguna pantalla lo llama. Hoy un producto se

@@ -35,6 +35,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
+# Carpeta de respaldos. Se crea aquí para que exista y sea escribible aunque
+# nadie la monte desde el host.
+RUN mkdir -p /app/respaldos && chown nextjs:nodejs /app/respaldos
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { requerirUsuario } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { sistemaConfigurado } from '@/lib/instalacion';
+import { asegurarRespaldoDiario } from '@/lib/respaldo-diario';
 import { cerrarSesion } from '@/actions/auth';
 import { Navegacion } from '@/components/navegacion';
 import { etiqueta } from '@/lib/format';
@@ -11,6 +12,10 @@ export default async function LayoutAplicacion({ children }: { children: React.R
   if (!(await sistemaConfigurado())) redirect('/bienvenida');
 
   const usuario = await requerirUsuario();
+
+  // Con el sistema ya instalado y alguien usándolo, revisa el respaldo del día.
+  asegurarRespaldoDiario();
+
   const empresa = await db.empresa.findFirst();
 
   const cajaAbierta = await db.cajaSesion.findFirst({

@@ -9,7 +9,8 @@ services:
       POSTGRES_DB: motoerp
     volumes:
       - datos-postgres:/var/lib/postgresql/data
-      # Respaldos: copia aquí lo que genere `pg_dump`
+      # La misma carpeta de respaldos que ve la aplicación, para poder
+      # restaurar desde aquí con `psql`.
       - ./respaldos:/respaldos
     ports:
       - '5432:5432'
@@ -33,6 +34,11 @@ services:
       PROVEEDOR_FE: ${PROVEEDOR_FE:-mock}
       NUBEFACT_URL: ${NUBEFACT_URL:-}
       NUBEFACT_TOKEN: ${NUBEFACT_TOKEN:-}
+      RESPALDOS_DIAS: ${RESPALDOS_DIAS:-30}
+    volumes:
+      # Los respaldos quedan en la carpeta `respaldos/` del proyecto, fuera del
+      # contenedor: sobreviven a un `docker compose down` o a una actualización.
+      - ./respaldos:/app/respaldos
     ports:
       - '3000:3000'
     # Aplica las migraciones pendientes y arranca

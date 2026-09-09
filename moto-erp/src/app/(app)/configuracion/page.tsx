@@ -27,6 +27,11 @@ const SECCIONES = [
     titulo: 'Categorías, marcas y modelos',
     detalle: 'Las listas que alimentan el catálogo de repuestos.',
   },
+  {
+    href: '/configuracion/respaldos',
+    titulo: 'Respaldos',
+    detalle: 'Copias de seguridad diarias. Descarga una a un USB de vez en cuando.',
+  },
 ];
 
 export default async function PaginaConfiguracion() {

@@ -252,17 +252,50 @@ pruebas/                 Pruebas de humo de los circuitos críticos
 
 ## Respaldos
 
-Los datos del negocio viven en PostgreSQL. Con Docker:
+**Son automáticos.** El sistema hace un respaldo por día sin que nadie tenga que
+acordarse, y los deja en la carpeta `respaldos/`. Se administran desde
+**Configuración → Respaldos**, donde además está el botón *Respaldar ahora* y la
+descarga de cada archivo.
+
+No hay tarea programada a una hora fija: el sistema comprueba si ya existe el
+respaldo del día cada vez que alguien abre una pantalla, como mucho una vez por
+hora. En una tienda la computadora se apaga al cerrar, así que un cron a las 3 de
+la mañana no correría casi nunca; atado al uso, el respaldo se hace apenas
+alguien enciende el equipo.
+
+Se conservan 30 días y nunca se borran los últimos 10, aunque sean más viejos.
+
+| Variable | Para qué |
+|---|---|
+| `RESPALDOS_DIR` | Carpeta donde se guardan. Por defecto `respaldos/` |
+| `RESPALDOS_DIAS` | Días de retención. Por defecto 30 |
+| `PG_DUMP_PATH` | Ruta a `pg_dump` si no está en el PATH |
+| `RESPALDO_AUTOMATICO` | `off` desactiva el respaldo diario |
+
+### Dos formatos según el equipo
+
+Si `pg_dump` está disponible, el respaldo incluye **estructura y datos**: se
+restaura solo, sobre una base vacía. Si no lo está —como en la imagen Docker de
+la aplicación, que no trae las herramientas de PostgreSQL— el sistema genera un
+volcado **solo de datos**, y hay que crear la estructura antes de cargarlo. La
+pantalla de Respaldos avisa cuál de los dos estás obteniendo.
+
+### Restaurar
+
+Restaurar reemplaza toda la información actual por la del respaldo. Desde la
+carpeta `moto-erp`:
 
 ```bash
-# Respaldo
-docker compose exec base-de-datos pg_dump -U motoerp motoerp > respaldos/motoerp-$(date +%F).sql
+# Respaldo completo (con estructura)
+docker compose exec -T base-de-datos psql -U motoerp -d motoerp < respaldos/ARCHIVO.sql
 
-# Restauración
-cat respaldos/motoerp-2026-08-12.sql | docker compose exec -T base-de-datos psql -U motoerp -d motoerp
+# Respaldo de solo datos: primero la estructura
+docker compose exec aplicacion node node_modules/prisma/build/index.js migrate deploy
+docker compose exec -T base-de-datos psql -U motoerp -d motoerp < respaldos/ARCHIVO.sql
 ```
 
-Prográmalo a diario. Un ERP sin respaldos es una bomba de tiempo.
+**Bájate una copia a un USB o a la nube de vez en cuando.** Un respaldo guardado
+en el mismo disco que la base no sirve el día en que ese disco falla.
 
 ---
 
